@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kira — Generative Art</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500&family=Space+Mono&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #080c14; overflow: hidden; width: 100vw; height: 100vh; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  .ui {
+    position: fixed;
+    font-family: 'Space Mono', monospace;
+    pointer-events: none;
+    z-index: 10;
+  }
+  .top-left {
+    top: 28px; left: 32px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .label {
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: rgba(124,106,247,0.7);
+  }
+  .slot {
+    font-size: 13px;
+    color: rgba(232,228,240,0.5);
+    letter-spacing: 1px;
+  }
+  .slot span { color: rgba(124,106,247,0.9); }
+  .composition {
+    font-size: 10px;
+    color: rgba(107,114,128,0.7);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  .bottom-right {
+    bottom: 28px; right: 32px;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 12px;
+    pointer-events: auto;
+  }
+  .palette-name {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: rgba(107,114,128,0.6);
+    text-transform: uppercase;
+  }
+  .freeze-btn {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 10px 20px;
+    background: rgba(124,106,247,0.1);
+    border: 1px solid rgba(124,106,247,0.3);
+    color: rgba(124,106,247,0.9);
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.2s;
+    pointer-events: auto;
+  }
+  .freeze-btn:hover {
+    background: rgba(124,106,247,0.2);
+    border-color: rgba(124,106,247,0.6);
+  }
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div class="ui top-left">
+  <div class="label">kira / art</div>
+  <div class="slot">slot <span id="slot-num">——————</span></div>
+  <div class="composition" id="comp-name">flow field</div>
+</div>
+
+<div class="ui bottom-right">
+  <div class="palette-name" id="palette-name">deep space</div>
+  <button class="freeze-btn" id="freeze">freeze</button>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true, antialias: false });
+
+const PALETTES = [
+  { name: 'deep space',  a: [0.031,0.039,0.102], b: [0.486,0.416,0.969] },
+  { name: 'amber pulse', a: [0.051,0.031,0.0],   b: [0.961,0.620,0.043] },
+  { name: 'mycelium',    a: [0.039,0.102,0.039], b: [0.204,0.827,0.600] },
+  { name: 'plasma',      a: [0.051,0.0,0.063],   b: [0.925,0.286,0.600] },
+  { name: 'arctic',      a: [0.0,0.063,0.125],   b: [0.055,0.647,0.914] },
+  { name: 'copper',      a: [0.039,0.024,0.0],   b: [0.851,0.467,0.024] },
+  { name: 'void',        a: [0.0,0.0,0.0],        b: [0.420,0.447,0.502] },
+];
+
+const COMPS = ['flow field','curl noise','particle drift','vector lattice','phase shift'];
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Compile shader
+function mkShader(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    console.error(gl.getShaderInfoLog(s));
+  }
+  return s;
+}
+function mkProgram(vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, mkShader(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, mkShader(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  return p;
+}
+
+// Full-screen quad vertex shader
+const quadVS = `
+attribute vec2 pos;
+varying vec2 uv;
+void main() {
+  uv = pos * 0.5 + 0.5;
+  gl_Position = vec4(pos, 0.0, 1.0);
+}`;
+
+// Particle system
+const N_PARTICLES = 600;
+const positions = new Float32Array(N_PARTICLES * 2);
+const velocities = new Float32Array(N_PARTICLES * 2);
+
+// State
+let seed = Date.now() & 0xFFFFFF;
+let paletteIdx = seed % 7;
+let compIdx = seed % 5;
+let startTime = performance.now();
+
+function initParticles() {
+  for (let i = 0; i < N_PARTICLES; i++) {
+    positions[i*2]   = Math.random() * 2 - 1;
+    positions[i*2+1] = Math.random() * 2 - 1;
+    velocities[i*2]   = 0;
+    velocities[i*2+1] = 0;
+  }
+}
+initParticles();
+
+// Trail quad program — fades previous frame
+const fadeProg = mkProgram(quadVS, `
+precision mediump float;
+uniform sampler2D tex;
+varying vec2 uv;
+void main() {
+  vec4 c = texture2D(tex, uv);
+  gl_FragColor = vec4(c.rgb * 0.92, c.a);
+}`);
+
+// Flow field fragment shader
+const flowFS = `
+precision highp float;
+uniform float time;
+uniform float seed;
+uniform vec3 col_a;
+uniform vec3 col_b;
+uniform float asp;
+varying vec2 uv;
+
+float hash(vec2 p) {
+  p = fract(p * vec2(127.1, 311.7) + seed * 0.001);
+  p += dot(p, p + 19.19);
+  return fract(p.x * p.y);
+}
+
+float noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f*f*(3.0-2.0*f);
+  return mix(
+    mix(hash(i), hash(i+vec2(1,0)), f.x),
+    mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x),
+    f.y);
+}
+
+void main() {
+  vec2 p = (uv - 0.5) * vec2(asp, 1.0);
+  float n1 = noise(p * 2.5 + time * 0.12);
+  float n2 = noise(p * 4.0 - time * 0.08 + 3.7);
+  float n  = n1 * 0.6 + n2 * 0.4;
+  float glow = pow(n, 2.2);
+  vec3 col = mix(col_a, col_b, glow);
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+const flowProg = mkProgram(quadVS, flowFS);
+
+// Particle vertex/fragment
+const partVS = `
+attribute vec2 pos;
+uniform vec2 resolution;
+void main() {
+  gl_PointSize = 2.5;
+  gl_Position = vec4(pos, 0.0, 1.0);
+}`;
+const partFS = `
+precision mediump float;
+uniform vec3 col_b;
+void main() {
+  float d = length(gl_PointCoord - 0.5) * 2.0;
+  float alpha = 1.0 - smoothstep(0.5, 1.0, d);
+  gl_FragColor = vec4(col_b, alpha * 0.8);
+}`;
+const partProg = mkProgram(partVS, partFS);
+
+// Buffers
+const quadBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
+
+const partBuf = gl.createBuffer();
+
+// Render target (framebuffer for trails)
+let fboTex, fbo;
+function initFBO() {
+  if (fboTex) gl.deleteTexture(fboTex);
+  if (fbo) gl.deleteFramebuffer(fbo);
+  fboTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, fboTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  fbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fboTex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+initFBO();
+window.addEventListener('resize', initFBO);
+
+// Flow field value at screen position
+function flowAt(x, y, t) {
+  const scale = 2.5;
+  const fx = x * scale;
+  const fy = y * scale;
+  const angle = (Math.sin(fx * 1.2 + t * 0.5) + Math.cos(fy * 1.4 - t * 0.3)) * Math.PI;
+  const speed = 0.004 + (seed % 100) * 0.00003;
+  return [Math.cos(angle) * speed, Math.sin(angle) * speed];
+}
+
+function drawQuad(prog) {
+  gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+  const posLoc = gl.getAttribLocation(prog, 'pos');
+  gl.enableVertexAttribArray(posLoc);
+  gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+function frame(ts) {
+  requestAnimationFrame(frame);
+  const t = (ts - startTime) * 0.001;
+  const pal = PALETTES[paletteIdx];
+  const W = canvas.width, H = canvas.height;
+  const asp = W / H;
+
+  // Update particles
+  for (let i = 0; i < N_PARTICLES; i++) {
+    const x = positions[i*2];
+    const y = positions[i*2+1];
+    const [vx, vy] = flowAt(x * asp, y, t);
+    positions[i*2]   += vx;
+    positions[i*2+1] += vy;
+    if (positions[i*2] > 1.05)   positions[i*2] = -1.05;
+    if (positions[i*2] < -1.05)  positions[i*2] = 1.05;
+    if (positions[i*2+1] > 1.05) positions[i*2+1] = -1.05;
+    if (positions[i*2+1] < -1.05)positions[i*2+1] = 1.05;
+  }
+
+  // 1. Render flow field to screen
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.useProgram(flowProg);
+  gl.uniform1f(gl.getUniformLocation(flowProg,'time'), t);
+  gl.uniform1f(gl.getUniformLocation(flowProg,'seed'), seed);
+  gl.uniform3fv(gl.getUniformLocation(flowProg,'col_a'), pal.a);
+  gl.uniform3fv(gl.getUniformLocation(flowProg,'col_b'), pal.b);
+  gl.uniform1f(gl.getUniformLocation(flowProg,'asp'), asp);
+  drawQuad(flowProg);
+
+  // 2. Render particles with additive blend
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+  gl.useProgram(partProg);
+  gl.uniform3fv(gl.getUniformLocation(partProg,'col_b'), pal.b);
+  gl.bindBuffer(gl.ARRAY_BUFFER, partBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
+  const pLoc = gl.getAttribLocation(partProg, 'pos');
+  gl.enableVertexAttribArray(pLoc);
+  gl.vertexAttribPointer(pLoc, 2, gl.FLOAT, false, 0, 0);
+  gl.drawArrays(gl.POINTS, 0, N_PARTICLES);
+  gl.disable(gl.BLEND);
+}
+
+requestAnimationFrame(frame);
+
+// Fetch Solana slot
+function fetchSlot() {
+  fetch('https://api.mainnet-beta.solana.com', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc:'2.0', id:1, method:'getSlot', params:[] })
+  })
+  .then(r => r.json())
+  .then(d => {
+    const slot = d.result;
+    if (slot) {
+      seed = slot % 0xFFFFFF;
+      paletteIdx = slot % 7;
+      compIdx = (slot >> 4) % 5;
+      document.getElementById('slot-num').textContent = String(slot).slice(-6);
+      document.getElementById('palette-name').textContent = PALETTES[paletteIdx].name;
+      document.getElementById('comp-name').textContent = COMPS[compIdx];
+    }
+  })
+  .catch(() => {});
+}
+fetchSlot();
+setInterval(fetchSlot, 30000);
+
+// Freeze button
+document.getElementById('freeze').addEventListener('click', () => {
+  const slot = document.getElementById('slot-num').textContent.trim();
+  const link = document.createElement('a');
+  link.download = `kira-art-${slot}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+
+// UI init
+document.getElementById('palette-name').textContent = PALETTES[paletteIdx].name;
+document.getElementById('comp-name').textContent = COMPS[compIdx];
+</script>
+</body>
+</html>
