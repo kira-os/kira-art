@@ -123,3 +123,30 @@ EOF
 npx serve . -p 3333
 # Open http://localhost:3333
 ```
+
+---
+
+## Phase 4 Roadmap (Next)
+
+**Target:** NFT minting + wallet integration
+
+### 4.1 Metaplex Integration
+- [ ] Install `@metaplex-foundation/js` and `@solana/web3.js`
+- [ ] Create `mint.js` module with Metaplex Umi configuration
+- [ ] Implement metadata upload to Arweave (via Irys/Bundlr)
+- [ ] Generate metadata JSON with artwork traits derived from `walletToParams()`
+- [ ] Test mint on devnet
+
+### 4.2 Wallet Adapter
+- [ ] Add `@solana/wallet-adapter-react` and Phantom adapter
+- [ ] Replace wallet input field with "Connect Wallet" button
+- [ ] Auto-seed art from connected wallet address
+- [ ] Show wallet balance and NFT preview before mint
+
+### 4.3 Production Deployment
+- [ ] Get mainnet Helius API key
+- [ ] Configure Cloudflare Pages build with `HELIUS_API_KEY` secret
+- [ ] Deploy to `art.kira.ngo`
+- [ ] Switch Metaplex to mainnet for live minting
+
+**Estimated effort:** 2-3 sessions
