@@ -93,8 +93,8 @@ helius.js (HeliusLiveFeed)
 4. **Wallet integration** — Currently accepts any address string. Phase 3 should add
    Phantom/Solflare wallet adapter so users mint art seeded from their own wallet.
 
-5. **PNG export quality** — The freeze button captures the 2D canvas overlay but not
-   the WebGL layer underneath. Need to composite both canvases for full export.
+5. **PNG export quality** — ✅ The freeze button now composites both WebGL flow field
+   (Layer 1) and 2D particle overlay (Layer 2) into a single PNG export.
 
 6. **Cloudflare Pages deploy** — `gen-config.js` needs to run as a build step in
    `wrangler.toml` / Pages CI, pulling `HELIUS_API_KEY` from CF environment secrets.
