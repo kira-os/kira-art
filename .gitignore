@@ -1,0 +1,4 @@
+# Generated file — contains API keys. Do NOT commit.
+config.js
+node_modules/
+.DS_Store
