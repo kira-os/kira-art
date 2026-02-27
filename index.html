@@ -371,10 +371,20 @@ document.getElementById('comp-name').textContent = COMPS[compIdx];
 
 <!-- Generative art overlay: wallet-seeded particle system -->
 <canvas id="gen-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2;opacity:0.7;"></canvas>
-<div id="wallet-ui" style="position:fixed;bottom:28px;left:32px;z-index:10;font-family:'Space Mono',monospace;">
-  <input id="wallet-input" placeholder="enter wallet address..." style="background:rgba(8,12,20,0.8);border:1px solid rgba(124,106,247,0.4);color:#7c6af7;font-family:'Space Mono',monospace;font-size:11px;padding:6px 10px;width:320px;outline:none;letter-spacing:1px;" />
-  <button onclick="loadWallet()" style="background:rgba(124,106,247,0.15);border:1px solid rgba(124,106,247,0.4);color:#7c6af7;font-family:'Space Mono',monospace;font-size:11px;padding:6px 12px;cursor:pointer;margin-left:4px;">GENERATE</button>
-</div>
+
+<!-- Wallet Adapter UI (React) -->
+<div id="wallet-root" style="position:fixed;bottom:28px;left:32px;z-index:10;"></div>
+
+<!-- React and Solana Wallet Adapter -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+<script src="https://unpkg.com/@solana/wallet-adapter-base@latest/dist/umd/index.min.js"></script>
+<script src="https://unpkg.com/@solana/wallet-adapter-react@latest/dist/umd/index.min.js"></script>
+<script src="https://unpkg.com/@solana/wallet-adapter-react-ui@latest/dist/umd/index.min.js"></script>
+<script src="https://unpkg.com/@solana/wallet-adapter-phantom@latest/dist/umd/index.min.js"></script>
+<script src="https://unpkg.com/@solana/wallet-adapter-solflare@latest/dist/umd/index.min.js"></script>
 <script type="module">
   import { walletToParams, ParticleSystem, handleSolanaEvent } from './generative.js';
   import { HeliusLiveFeed, EventType } from './helius.js';
@@ -390,6 +400,7 @@ document.getElementById('comp-name').textContent = COMPS[compIdx];
   const genCanvas = document.getElementById('gen-canvas');
   let sys = null;
   let heliusFeed = null;
+  let currentWalletAddress = 'KiraGenerativeArtDefaultSeedV1';
 
   function resize() {
     genCanvas.width = window.innerWidth;
@@ -399,9 +410,8 @@ document.getElementById('comp-name').textContent = COMPS[compIdx];
   window.addEventListener('resize', resize);
   resize();
 
-  // Default: seed with Kira's wallet placeholder
-  let currentAddress = 'KiraGenerativeArtDefaultSeedV1';
-  sys = new ParticleSystem(genCanvas, walletToParams(currentAddress));
+  // Initialize particle system with default seed
+  sys = new ParticleSystem(genCanvas, walletToParams(currentWalletAddress));
 
   // Start Helius live feed — uses real API key if available, otherwise demo
   heliusFeed = new HeliusLiveFeed(HELIUS_API_KEY, (event) => {
@@ -431,17 +441,103 @@ document.getElementById('comp-name').textContent = COMPS[compIdx];
   }
   animate();
 
-  window.loadWallet = function() {
-    const addr = document.getElementById('wallet-input').value.trim();
-    if (addr.length > 6) {
-      currentAddress = addr;
-      sys = new ParticleSystem(genCanvas, walletToParams(addr));
+  // Expose function to update wallet address from React components
+  window.updateGenerativeWallet = function(address) {
+    if (address && address.length > 6) {
+      currentWalletAddress = address;
+      sys = new ParticleSystem(genCanvas, walletToParams(address));
+      console.log('[art] Regenerated with wallet:', address.slice(0, 8) + '...');
     }
   };
 
-  document.getElementById('wallet-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') window.loadWallet();
-  });
+  // Initialize React Wallet Adapter
+  const { useState, useEffect } = React;
+  const { ConnectionProvider, WalletProvider, useWallet, useConnection } = window.SolanaWalletAdapterReact;
+  const { WalletModalProvider, WalletMultiButton } = window.SolanaWalletAdapterReactUI;
+  const { PhantomWalletAdapter, SolflareWalletAdapter } = window.SolanaWalletAdapterPhantom;
+  const { SolflareWalletAdapter: SolflareAdapter } = window.SolanaWalletAdapterSolflare;
+
+  const NETWORK = 'https://api.devnet.solana.com';
+  const WALLETS = [new PhantomWalletAdapter(), new SolflareWalletAdapter()];
+
+  function WalletConnect() {
+    const { publicKey, connected, connecting, disconnect } = useWallet();
+    const { connection } = useConnection();
+    const [balance, setBalance] = useState(null);
+
+    useEffect(() => {
+      if (connected && publicKey) {
+        connection.getBalance(publicKey).then(lamports => {
+          setBalance(lamports / 1e9);
+        });
+        // Update generative art with connected wallet
+        window.updateGenerativeWallet(publicKey.toString());
+      }
+    }, [connected, publicKey, connection]);
+
+    if (connected && publicKey) {
+      return React.createElement('div', { 
+        style: { 
+          fontFamily: "'Space Mono', monospace", 
+          fontSize: '11px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px'
+        } 
+      }, [
+        React.createElement('span', { 
+          key: 'addr',
+          style: { color: '#7c6af7' }
+        }, `${publicKey.toString().slice(0, 4)}...${publicKey.toString().slice(-4)}`),
+        React.createElement('span', { 
+          key: 'bal',
+          style: { color: 'rgba(232,228,240,0.5)' }
+        }, balance !== null ? `${balance.toFixed(4)} SOL` : '...'),
+        React.createElement('button', {
+          key: 'btn',
+          onClick: disconnect,
+          style: {
+            background: 'rgba(124,106,247,0.15)',
+            border: '1px solid rgba(124,106,247,0.4)',
+            color: '#7c6af7',
+            fontFamily: "'Space Mono', monospace",
+            fontSize: '10px',
+            padding: '4px 8px',
+            cursor: 'pointer',
+            textTransform: 'uppercase',
+            letterSpacing: '1px'
+          }
+        }, 'Disconnect')
+      ]);
+    }
+
+    return React.createElement(WalletMultiButton, {
+      style: {
+        background: 'rgba(124,106,247,0.15)',
+        border: '1px solid rgba(124,106,247,0.4)',
+        color: '#7c6af7',
+        fontFamily: "'Space Mono', monospace",
+        fontSize: '11px',
+        padding: '8px 16px',
+        textTransform: 'uppercase',
+        letterSpacing: '2px'
+      }
+    });
+  }
+
+  function App() {
+    return React.createElement(ConnectionProvider, { endpoint: NETWORK },
+      React.createElement(WalletProvider, { wallets: WALLETS, autoConnect: true },
+        React.createElement(WalletModalProvider, null,
+          React.createElement(WalletConnect)
+        )
+      )
+    );
+  }
+
+  const root = ReactDOM.createRoot(document.getElementById('wallet-root'));
+  root.render(React.createElement(App));
+  console.log('[wallet] React wallet adapter mounted');
 </script>
 </body>
 </html>

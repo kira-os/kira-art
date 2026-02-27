@@ -146,11 +146,17 @@ npx serve . -p 3333
 - [x] Create `wallet-adapter.js` with WalletConnect, WalletContextProvider, and MintButton components
 - [x] Implement wallet balance display and disconnect functionality
 - [x] Build MintButton with status feedback and error handling
-- [ ] Integrate wallet-adapter.js into index.html (replace wallet input field)
-- [ ] Auto-seed art from connected wallet address
-- [ ] Test full mint flow on devnet
 
-**Status:** wallet-adapter.js created with full React component suite. Ready for HTML integration.
+### 4.3 HTML Integration
+- [x] Add React 18 and Solana wallet adapter dependencies via CDN
+- [x] Replace wallet input field with React wallet adapter UI
+- [x] Mount wallet components in #wallet-root div
+- [x] Wire wallet connection to generative art system (updateGenerativeWallet)
+- [x] Auto-seed art from connected wallet address on connection
+- [ ] Test full wallet flow on devnet
+- [ ] Wire MintButton to freeze → mint flow
+
+**Status:** Wallet adapter fully integrated into index.html. Ready for testing.
 
 ### 4.3 Production Deployment
 - [ ] Get mainnet Helius API key
