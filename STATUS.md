@@ -75,6 +75,7 @@ helius.js (HeliusLiveFeed)
 | `config.js` | ✅ Generated | Gitignored, contains API key |
 | `gen-config.js` | ✅ New | Generates config.js from .env |
 | `.gitignore` | ✅ New | Protects config.js from commits |
+| `mint.js` | ✅ New | Metaplex Umi integration for NFT minting |
 
 ---
 
@@ -131,11 +132,13 @@ npx serve . -p 3333
 **Target:** NFT minting + wallet integration
 
 ### 4.1 Metaplex Integration
-- [ ] Install `@metaplex-foundation/js` and `@solana/web3.js`
-- [ ] Create `mint.js` module with Metaplex Umi configuration
-- [ ] Implement metadata upload to Arweave (via Irys/Bundlr)
-- [ ] Generate metadata JSON with artwork traits derived from `walletToParams()`
+- [x] Install `@metaplex-foundation/js` and `@solana/web3.js`
+- [x] Create `mint.js` module with Metaplex Umi configuration
+- [x] Implement metadata upload to Arweave (via Irys/Bundlr)
+- [x] Generate metadata JSON with artwork traits derived from `walletToParams()`
 - [ ] Test mint on devnet
+
+**Status:** mint.js created with Umi configuration for devnet. Ready for wallet adapter integration.
 
 ### 4.2 Wallet Adapter
 - [ ] Add `@solana/wallet-adapter-react` and Phantom adapter
