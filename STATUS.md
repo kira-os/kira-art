@@ -76,6 +76,7 @@ helius.js (HeliusLiveFeed)
 | `gen-config.js` | ✅ New | Generates config.js from .env |
 | `.gitignore` | ✅ New | Protects config.js from commits |
 | `mint.js` | ✅ New | Metaplex Umi integration for NFT minting |
+| `wallet-adapter.js` | ✅ New | React wallet adapter (Phantom/Solflare) with MintButton |
 
 ---
 
@@ -141,10 +142,15 @@ npx serve . -p 3333
 **Status:** mint.js created with Umi configuration for devnet. Ready for wallet adapter integration.
 
 ### 4.2 Wallet Adapter
-- [ ] Add `@solana/wallet-adapter-react` and Phantom adapter
-- [ ] Replace wallet input field with "Connect Wallet" button
+- [x] Add `@solana/wallet-adapter-react` and Phantom/Solflare adapters
+- [x] Create `wallet-adapter.js` with WalletConnect, WalletContextProvider, and MintButton components
+- [x] Implement wallet balance display and disconnect functionality
+- [x] Build MintButton with status feedback and error handling
+- [ ] Integrate wallet-adapter.js into index.html (replace wallet input field)
 - [ ] Auto-seed art from connected wallet address
-- [ ] Show wallet balance and NFT preview before mint
+- [ ] Test full mint flow on devnet
+
+**Status:** wallet-adapter.js created with full React component suite. Ready for HTML integration.
 
 ### 4.3 Production Deployment
 - [ ] Get mainnet Helius API key
